@@ -1,7 +1,7 @@
 import socket
 
 host = "localhost"
-port = 6969
+port = 8000
 
 def bytesToString(bytes):
     asBytes = bytearray()
@@ -23,11 +23,13 @@ def listCompare(arr1, arr2):
     
 def responseFork(req):
     reqHead = [0x43, 0x4d, 0x44, 0x20] #"CMD "
-    msgHi = [0x68, 0x69] #"hi"
+    msgHi = [0x68, 0x69, 0x0d, 0x0a, 0x0d, 0x0a] #"hi", used in handshake
+    msgNope = [ord('n'), ord('o'), ord('p'), ord('e')] #'nope', use to aid in finding data in memory
 
-    message = ""
     responseHead = [ord('R'), ord('E'), ord('S'), ord('P'), ord(' ')]
     responseTail = [0x0d, 0x0a, 0x0d, 0x0a]
+    
+    message = ""
     
     try:
         if (listCompare(req[0:4], reqHead) == False):
@@ -37,16 +39,20 @@ def responseFork(req):
         print("Unfamiliar message syntax (header)")
     
     try:
-        message = req[4:req.index(responseTail[0])]
+        message = req[4:len(req)]
     except:
         print("Unfamiliar message syntax (body)")
         return [0]
     
     if (listCompare(message, msgHi)):
-        return responseHead + msgHi + responseTail
+        return responseHead + msgHi
+        
+    if listCompareB(message[0:12], "capabilities"):
+        print("note for future generations: add capabilities")
         
     print("No output for this request")
-    return [0]
+    return msgNope
+
 
 print("welcome to sonic drive in @ " + host + ":" + str(port) + " (real)")
 while(True):
@@ -56,7 +62,12 @@ while(True):
         conn, addr = jawn.accept()
         with conn:
             while True:
-                data = conn.recv(1024)
+                try:
+                    data = conn.recv(1024)
+                except Exception as e:
+                    print("Exception thrown from conn.recv: ")
+                    print(e)
+                
                 if not data:
                     break
                 
@@ -79,4 +90,9 @@ while(True):
                     stringresp += chr(char)
                 print("str  :" + stringresp)
                 print("bytes:" + bytesToString(response))
-                conn.sendall(bytes(response))
+                try:
+                    conn.sendall(bytes(response))
+                except Exception as e:
+                    print("Exception thrown from conn.sendall: ")
+                    print(e)
+                    
