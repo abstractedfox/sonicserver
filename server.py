@@ -1,4 +1,6 @@
 import socket
+import base64
+import json
 
 host = "localhost"
 port = 8000
@@ -45,8 +47,6 @@ def responseFork(req):
     #Parse the rest of the message from the header
     try:
         if listCompare(req[0:4], cmdHead) == True:
-            #print("Unfamiliar message header:" + bytesToString(req[0:4]))
-            #return [0]
             try:
                 message = req[4:len(req)]
                 requestType = cmdHead
@@ -63,7 +63,6 @@ def responseFork(req):
     except:
         print("Unfamiliar message syntax (header)")
     
-    
     if listCompare(message, msgHi):
         return responseHead + msgHi
         
@@ -71,15 +70,38 @@ def responseFork(req):
         #It seems like it doesn't actually care what the response contains?
         return responseHead + stringToByte("capabilities") + crlf + stringToByte("Content-Length:12") + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte('{"asdf": 0}') + [0x0a]
         
-    #Boilerplate while we prod the "devicetype" request that uses the DATA header
+
+    #"DATA" means the content of the message is (most likely) in a json string
     if requestType == dataHead:
-        #jsonString = '{"devicetype": "verycooldevice"}'
-        #jsonString = '{"devicetype": "STALL DEVICE"}'
-        jsonString = '{"For":"devicetype","Payload":"STALL DEVICE","Type":"RESP"}'
+        message = str(message)
         
-        #return responseHead + stringToByte("devicetype") + crlf + stringToByte("Content-Length:" + str(len(jsonString))) + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte(jsonString) + [0x0a]
-        return dataHead + stringToByte(" ") + crlf + stringToByte("Content-Length:" + str(len(jsonString))) + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte(jsonString) + [0x0a]
-    
+        #Verify that the type is json
+        if message.find("text/json") == -1:
+            print("Unknown DATA message type")
+            return msgNope
+        
+        indexAfterFor = message.find('"For":"')
+        indexAfterFor += 7 #find gets the index of the beginning of the substring, not the end
+        
+        contentLengthStart = message.find("Content-Length: ") + len("Content-Length: ")
+        contentLengthEnd = message.find("\\r\\n", contentLengthStart)
+        
+        contentLength = int(message[contentLengthStart:contentLengthEnd]) 
+        
+        jsonString = message[message.find("{"):message.find("{") + contentLength]
+        payloadStart = jsonString.find('"Payload":"') + 11
+        payloadEnd = jsonString.find('"', payloadStart)
+        payload = jsonString[payloadStart:payloadEnd]
+        
+        #The devicetype command doesn't actually care what the response contains as long as it's 'devicetype' and formed correctly
+        if message[indexAfterFor:indexAfterFor + 10] == "devicetype":
+            deviceTypeResponse = '{"For":"devicetype","Payload":"STALL DEVICE","Type":"RESP"}'
+            return dataHead + stringToByte(" ") + crlf + stringToByte("Content-Length:" + str(len(deviceTypeResponse))) + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte(deviceTypeResponse) + [0x0a]
+            
+        if message[indexAfterFor:indexAfterFor + 10] == "stalllogin":
+            print("login stuff goes here! json time:")
+            print(base64.b64decode(payload))
+            
     print("No output for this request")
     return msgNope
 
