@@ -12,6 +12,12 @@ def bytesToString(bytes):
         byteToStr += " "
     return byteToStr
     
+def stringToByte(string):
+    output = []
+    for char in string:
+        output.append(ord(char))
+    return output
+    
 #this is O(bad) we'll clean it up later
 def listCompare(arr1, arr2):
     if (len(arr1) != len(arr2)):
@@ -22,34 +28,58 @@ def listCompare(arr1, arr2):
     return True
     
 def responseFork(req):
-    reqHead = [0x43, 0x4d, 0x44, 0x20] #"CMD "
-    msgHi = [0x68, 0x69, 0x0d, 0x0a, 0x0d, 0x0a] #"hi", used in handshake
-    msgNope = [ord('n'), ord('o'), ord('p'), ord('e')] #'nope', use to aid in finding data in memory
-
-    responseHead = [ord('R'), ord('E'), ord('S'), ord('P'), ord(' ')]
+    crlf = [0x0d, 0x0a]
+    cmdHead = stringToByte("CMD ")
+    dataHead = stringToByte("DATA")
+    
+    msgHi = stringToByte("hi") + crlf + crlf #handshake
+    
+    msgNope = stringToByte("nope")#'nope', use to aid in finding data in memory
+    
+    responseHead = stringToByte("RESP ")
     responseTail = [0x0d, 0x0a, 0x0d, 0x0a]
     
     message = ""
+    requestType = ""
     
+    #Parse the rest of the message from the header
     try:
-        if (listCompare(req[0:4], reqHead) == False):
-            print("Unfamiliar message header:" + bytesToString(req[0:4]))
-            return [0]
+        if listCompare(req[0:4], cmdHead) == True:
+            #print("Unfamiliar message header:" + bytesToString(req[0:4]))
+            #return [0]
+            try:
+                message = req[4:len(req)]
+                requestType = cmdHead
+            except:
+                print("Unfamiliar message syntax (body)")
+                return [0]
+        if listCompare(req[0:4], dataHead) == True:
+            try:
+                message = req[4:len(req)]
+                requestType = dataHead
+            except:
+                print("Unfamiliar message syntax (body)")
+                return [0]
     except:
         print("Unfamiliar message syntax (header)")
     
-    try:
-        message = req[4:len(req)]
-    except:
-        print("Unfamiliar message syntax (body)")
-        return [0]
     
-    if (listCompare(message, msgHi)):
+    if listCompare(message, msgHi):
         return responseHead + msgHi
         
-    if listCompareB(message[0:12], "capabilities"):
-        print("note for future generations: add capabilities")
+    if listCompare(message[0:12], stringToByte("capabilities")):
+        #It seems like it doesn't actually care what the response contains?
+        return responseHead + stringToByte("capabilities") + crlf + stringToByte("Content-Length:12") + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte('{"asdf": 0}') + [0x0a]
         
+    #Boilerplate while we prod the "devicetype" request that uses the DATA header
+    if requestType == dataHead:
+        #jsonString = '{"devicetype": "verycooldevice"}'
+        #jsonString = '{"devicetype": "STALL DEVICE"}'
+        jsonString = '{"For":"devicetype","Payload":"STALL DEVICE","Type":"RESP"}'
+        
+        #return responseHead + stringToByte("devicetype") + crlf + stringToByte("Content-Length:" + str(len(jsonString))) + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte(jsonString) + [0x0a]
+        return dataHead + stringToByte(" ") + crlf + stringToByte("Content-Length:" + str(len(jsonString))) + crlf + stringToByte("Content-Type: text/json") + crlf + crlf + stringToByte(jsonString) + [0x0a]
+    
     print("No output for this request")
     return msgNope
 
